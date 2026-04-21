@@ -16,12 +16,12 @@ export const textMessageController = async (req,res) => {
     const {chatId, prompt} = req.body
 
     const chat = await Chat.findOne({userId, _id:chatId})
-    chat.messages.push({role: 'user', content: prompt, timeStamp: Date.now(),
+    chat.messages.push({role: 'user', content: prompt, timestamp: Date.now(),
       isImage: false
     })
-
+console.log("prompt:", prompt)
   const {choices} = await openai.chat.completions.create({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.5-flash",
     messages: [
         {
             role: "user",
@@ -30,8 +30,12 @@ export const textMessageController = async (req,res) => {
     ],
 });
 
-const reply = {...choices[0].message, timeStamp: Date.now(),
-      isImage: false}
+const reply = {
+  role: choices[0].message.role,
+  content: choices[0].message.content,
+  timestamp: Date.now(),
+  isImage: false
+}
       res.json({success: true, reply})
 
       chat.messages.push(reply)
@@ -54,6 +58,7 @@ export const imageMessageController = async (req,res) => {
     }
     const {prompt, chatId, isPublished} = req.body
 
+
     // Find chat 
     const chat = await Chat.findOne({userId, _id:chatId})
 
@@ -66,19 +71,20 @@ export const imageMessageController = async (req,res) => {
     })
 
     // Encode the prompt 
-    const encodedPrompt = encodedURIComponent(prompt)
+    const encodedPrompt = encodeURIComponent(prompt).replace(/%20/g, '+')
 
     // construct ImageKit AI generation URL 
     const generatedImageUrl = `${process.env.IMAGEKIT_URL_ENDPOINT}/ik-genimg-prompt-${encodedPrompt}/quickgpt/${Date.now()}.png?tr=w-800,h-800`;
+
 
     //Trigger generation by fetching from ImageKit
     const aiImageResponse = await axios.get(generatedImageUrl, {responseType: "arraybuffer"})
 
     // Convert to Base64 
-    const base64Image = `data:image/png;base64, ${Buffer.from(aiImageResponse.data, "binary").toString('base64')}`;
+    const base64Image = `data:image/png;base64,${Buffer.from(aiImageResponse.data, "binary").toString('base64')}`
 
     //Uplaod to ImageKit Media Library
-    const uplaodResponse = await imagekit.uplaoad({
+    const uploadResponse = await imagekit.upload({
       file: base64Image,
       fileName: `${Date.now()}.png`,
       folder: "quickgpt"
@@ -86,18 +92,16 @@ export const imageMessageController = async (req,res) => {
     
     const reply = {
       role: 'assistant', 
-      content: uplaodResponse.url, 
-      timeStamp: Date.now(),
-      isImage: false,
+      content: uploadResponse.url, 
+      timestamp: Date.now(),
+      isImage: true,
       isPublished
     }
 
-      res.json({success: true, reply})
-
       chat.messages.push(reply)
-      await chat.save()
-
-      await User.updateOne({_id: userId}, {$inc: {credits: -2}})
+await chat.save()
+await User.updateOne({_id: userId}, {$inc: {credits: -2}})
+res.json({success: true, reply})
 
   } catch (error) {
     res.json({success: false, message: error.message});

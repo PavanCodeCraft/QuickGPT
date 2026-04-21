@@ -1,12 +1,15 @@
 import React, { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAppContext } from '../context/AppContext'
 
 const Loading = () => {
 
   const nagivate = useNavigate()
+  const {fetchUser} = useAppContext()
 
   useEffect(()=> {
     const timeout = setTimeout(()=> {
+      fetchUser()
       nagivate('/')
     },8000)
     return ()=> clearTimeout(timeout)
